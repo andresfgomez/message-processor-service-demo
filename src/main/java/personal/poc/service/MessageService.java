@@ -1,6 +1,7 @@
 package personal.poc.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.stereotype.Service;
 import personal.poc.model.Message;
 import personal.poc.repository.MessageRepository;
@@ -22,4 +23,5 @@ public class MessageService {
             return null;
         });
     }
+    
 }
