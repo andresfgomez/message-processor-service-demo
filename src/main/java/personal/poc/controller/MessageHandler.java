@@ -7,6 +7,9 @@ import personal.poc.model.Message;
 import personal.poc.service.MessageService;
 import reactor.core.publisher.Mono;
 
+import java.util.Date;
+import java.util.Locale;
+
 @Component
 public class MessageHandler {
 
@@ -17,7 +20,12 @@ public class MessageHandler {
     }
 
     public Mono<ServerResponse> process(ServerRequest request) {
-        Mono<Void> flow = request.bodyToMono(Message.class).flatMap(message -> messageService.save(message));
+        Mono<Void> flow = request.bodyToMono(Message.class).map(message -> {
+            Locale locale = new Locale(message.getLanguage());
+            message.setLanguageDesc(locale.getDisplayName());
+            message.setCreatedAt(new Date());
+            return message;
+        }).flatMap(message -> messageService.save(message));
         return ServerResponse.noContent().build(flow).switchIfEmpty(ServerResponse.notFound().build());
     }
 
