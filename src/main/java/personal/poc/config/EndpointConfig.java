@@ -6,6 +6,7 @@ import org.springframework.web.reactive.function.server.RouterFunction;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import personal.poc.controller.DummyHandler;
 import personal.poc.controller.MessageHandler;
+import personal.poc.controller.MessageSnapshotHandler;
 
 import static org.springframework.web.reactive.function.server.RequestPredicates.GET;
 import static org.springframework.web.reactive.function.server.RequestPredicates.POST;
@@ -22,5 +23,10 @@ public class EndpointConfig {
     @Bean
     RouterFunction<ServerResponse> messageRoutes(MessageHandler handler) {
         return route(POST("/message"), handler::process);
+    }
+
+    @Bean
+    RouterFunction<ServerResponse> messageSnapshot(MessageSnapshotHandler messageSnapshotHandler) {
+        return route(POST("/message-snapshot"), request -> messageSnapshotHandler.generateSnapshot());
     }
 }

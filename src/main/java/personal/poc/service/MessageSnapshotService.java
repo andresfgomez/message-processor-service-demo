@@ -8,16 +8,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.TypedAggregation;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import personal.poc.model.Message;
 import personal.poc.model.MessageSnapshot;
 import personal.poc.model.S3Information;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
+import java.util.Optional;
 
 import static org.springframework.data.mongodb.core.aggregation.Aggregation.*;
 
@@ -37,8 +37,7 @@ public class MessageSnapshotService {
         this.s3Service = s3Service;
     }
 
-    @Scheduled(fixedDelayString = "120000")
-    public Flux<MessageSnapshot> saveSnapshotOfMessageGroupedByLanguageInS3() {
+    public Flux<MessageSnapshot> saveSnapshotOfMessageGroupedByLanguage() {
         Flux<MessageSnapshot> messageSnapshotGroupedByLanguage = groupMessageByLanguage();
         saveSnapshotInS3(messageSnapshotGroupedByLanguage);
         return messageSnapshotGroupedByLanguage;
@@ -54,32 +53,37 @@ public class MessageSnapshotService {
     }
 
     private void saveSnapshotInS3(Flux<MessageSnapshot> messageSnapshotFlux) {
-        try {
-            saveJsonInS3(messageSnapshotFlux);
-        } catch (IOException e) {
-            log.error("No fue posible transformar el snapshot a json", e.getMessage());
-        }
+        Mono<byte[]> snapshotJsonBytes = convertSnapshotToJsonByteArray(messageSnapshotFlux);
+        saveJsonInS3(snapshotJsonBytes);
     }
 
-    private void saveJsonInS3(Flux<MessageSnapshot> messageSnapshotFlux) throws JsonProcessingException {
-        byte[] snapshotBytes = convertSnapshotToJsonByteArray(messageSnapshotFlux);
-        InputStream snapshotInputStream = new ByteArrayInputStream(snapshotBytes);
+    private void saveJsonInS3(Mono<byte[]> snapshotJsonBytes) {
+        snapshotJsonBytes.subscribe(snapshotByte -> {
+            InputStream snapshotInputStream = new ByteArrayInputStream(snapshotByte);
 
-        Long contentLength = Long.valueOf(snapshotBytes.length);
+            Long contentLength = Long.valueOf(snapshotByte.length);
 
-        ObjectMetadata metadata = new ObjectMetadata();
-        metadata.setContentLength(contentLength);
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(contentLength);
 
-        s3Service.save(S3Information.builder()
-                .bucketName(bucketName)
-                .pathInBucket("snapshotFile3")
-                .infoToSave(snapshotInputStream)
-                .metadata(metadata)
-                .build());
+            s3Service.save(S3Information.builder()
+                    .bucketName(bucketName)
+                    .pathInBucket("snapshotFileByService")
+                    .infoToSave(snapshotInputStream)
+                    .metadata(metadata)
+                    .build()).subscribe();
+        });
     }
 
-    private byte[] convertSnapshotToJsonByteArray(Flux<MessageSnapshot> messageSnapshotFlux) throws JsonProcessingException {
+    private Mono<byte[]> convertSnapshotToJsonByteArray(Flux<MessageSnapshot> messageSnapshotFlux) {
         ObjectMapper mapper = new ObjectMapper();
-        return mapper.writeValueAsBytes(messageSnapshotFlux.collectList().block());
+
+        return messageSnapshotFlux.collectList().flatMap(messageSnapshot -> {
+            try {
+                return Mono.just(mapper.writeValueAsBytes(messageSnapshot));
+            } catch (JsonProcessingException e) {
+                return  Mono.justOrEmpty(Optional.empty());
+            }
+        } );
     }
 }
